@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบลงทะเบียน</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#1b2433;--mut:#64708a;--pri:#2563eb;--bd:#dfe5f1;--ok:#16a34a;--err:#dc2626}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1624;--card:#17213a;--tx:#e8edf8;--mut:#93a0bd;--pri:#5b8cff;--bd:#2a3858}}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Sarabun","Noto Sans Thai",system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--bd)}
+header b{font-size:18px}
+header a{color:var(--pri);text-decoration:none;font-size:14px;cursor:pointer}
+main{max-width:960px;margin:24px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:22px}
+.narrow{max-width:480px;margin:0 auto}
+h2{margin:0 0 16px;font-size:20px}
+label{display:block;font-size:14px;color:var(--mut);margin:12px 0 4px}
+input,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:9px;background:transparent;color:var(--tx);font:inherit}
+input:focus,textarea:focus{outline:2px solid var(--pri);border-color:transparent}
+button{padding:10px 18px;border:0;border-radius:9px;background:var(--pri);color:#fff;font:inherit;cursor:pointer}
+button.alt{background:transparent;color:var(--pri);border:1px solid var(--pri)}
+button:disabled{opacity:.6;cursor:wait}
+.msg{margin-top:14px;font-size:14px;min-height:20px}.ok{color:var(--ok)}.err{color:var(--err)}
+.bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.bar input{flex:1;min-width:180px}
+.stat{color:var(--mut);font-size:14px}
+.wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+th{color:var(--mut);font-weight:600}
+td.w{white-space:normal;min-width:160px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header><b>📝 ระบบลงทะเบียน</b><a id="nav"></a></header>
+<main>
+
+<section id="vReg" class="card narrow">
+  <h2>ลงทะเบียน</h2>
+  <div id="regForm">
+    <label>ชื่อ-นามสกุล *</label><input id="fn" maxlength="120" autocomplete="name">
+    <label>อีเมล *</label><input id="em" type="email" maxlength="200" autocomplete="email">
+    <label>เบอร์โทรศัพท์ *</label><input id="ph" type="tel" maxlength="20" autocomplete="tel">
+    <label>หน่วยงาน / สถานศึกษา</label><input id="og" maxlength="150">
+    <label>หมายเหตุ</label><textarea id="nt" rows="3" maxlength="500"></textarea>
+    <div style="margin-top:16px"><button id="regBtn">ลงทะเบียน</button></div>
+  </div>
+  <div id="regMsg" class="msg"></div>
+</section>
+
+<section id="vLogin" class="card narrow hide">
+  <h2>เข้าสู่ระบบผู้ดูแล</h2>
+  <label>ชื่อผู้ใช้</label><input id="au" autocomplete="username">
+  <label>รหัสผ่าน</label><input id="ap" type="password" autocomplete="current-password">
+  <div style="margin-top:16px"><button id="loginBtn">เข้าสู่ระบบ</button></div>
+  <div id="loginMsg" class="msg"></div>
+</section>
+
+<section id="vAdmin" class="card hide">
+  <h2>ข้อมูลผู้ลงทะเบียน</h2>
+  <div class="bar">
+    <input id="q" placeholder="ค้นหาชื่อ อีเมล เบอร์โทร หน่วยงาน...">
+    <button class="alt" id="refBtn">รีเฟรช</button>
+    <button class="alt" id="csvBtn">ดาวน์โหลด CSV</button>
+    <button class="alt" id="outBtn">ออกจากระบบ</button>
+  </div>
+  <div class="stat" id="stat"></div>
+  <div class="wrap"><table>
+    <thead><tr><th>#</th><th>วันที่ลงทะเบียน</th><th>ชื่อ-นามสกุล</th><th>อีเมล</th><th>เบอร์โทร</th><th>หน่วยงาน</th><th>หมายเหตุ</th></tr></thead>
+    <tbody id="tb"></tbody>
+  </table></div>
+  <div id="admMsg" class="msg"></div>
+</section>
+
+</main>
+<script>
+const URL_ = "https://wlvhiyrsvaxfzkpitjct.supabase.co";
+const KEY = "sb_publishable_ZSq81HJc62qj1rk49I3LoQ_TtYp9UpF";
+const H = {apikey: KEY, "Content-Type": "application/json"};
+const $ = id => document.getElementById(id);
+let cred = null, rows = [];
+
+function show(v){
+  ["vReg","vLogin","vAdmin"].forEach(x => $(x).classList.toggle("hide", x !== v));
+  $("nav").textContent = v === "vReg" ? "สำหรับผู้ดูแลระบบ →" : "← หน้าลงทะเบียน";
+  $("nav").onclick = () => { location.hash = v === "vReg" ? "admin" : ""; };
+}
+function route(){
+  if (location.hash === "#admin") show(cred ? "vAdmin" : "vLogin");
+  else show("vReg");
+}
+window.addEventListener("hashchange", route);
+
+function say(el, t, ok){ el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); }
+
+$("regBtn").onclick = async () => {
+  const body = {
+    full_name: $("fn").value.trim(), email: $("em").value.trim(), phone: $("ph").value.trim(),
+    organization: $("og").value.trim() || null, note: $("nt").value.trim() || null
+  };
+  const m = $("regMsg");
+  if (body.full_name.length < 2) return say(m, "กรุณากรอกชื่อ-นามสกุล");
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(body.email)) return say(m, "รูปแบบอีเมลไม่ถูกต้อง");
+  if (!/^[0-9+\-\s]{8,20}$/.test(body.phone)) return say(m, "เบอร์โทรไม่ถูกต้อง (ตัวเลข 8-20 หลัก)");
+  $("regBtn").disabled = true;
+  try {
+    const r = await fetch(URL_ + "/rest/v1/reg_registrations", {method:"POST", headers:{...H, Prefer:"return=minimal"}, body: JSON.stringify(body)});
+    if (r.ok) {
+      say(m, "ลงทะเบียนสำเร็จ ขอบคุณครับ/ค่ะ", true);
+      ["fn","em","ph","og","nt"].forEach(i => $(i).value = "");
+    } else {
+      const e = await r.json().catch(() => ({}));
+      say(m, e.code === "23505" ? "อีเมลนี้ลงทะเบียนไว้แล้ว" : "ลงทะเบียนไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองใหม่");
+    }
+  } catch { say(m, "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"); }
+  $("regBtn").disabled = false;
+};
+
+async function load(u, p){
+  const r = await fetch(URL_ + "/rest/v1/rpc/reg_admin_list", {method:"POST", headers:H, body: JSON.stringify({p_username:u, p_password:p})});
+  if (!r.ok) throw new Error("net");
+  return r.json();
+}
+
+$("loginBtn").onclick = async () => {
+  const u = $("au").value.trim(), p = $("ap").value, m = $("loginMsg");
+  $("loginBtn").disabled = true;
+  try {
+    const d = await load(u, p);
+    if (d.ok) { cred = {u, p}; rows = d.rows; $("ap").value = ""; m.textContent = ""; render(); show("vAdmin"); }
+    else say(m, d.error === "locked" ? "ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่" : "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+  } catch { say(m, "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"); }
+  $("loginBtn").disabled = false;
+};
+$("ap").addEventListener("keydown", e => { if (e.key === "Enter") $("loginBtn").click(); });
+
+$("refBtn").onclick = async () => {
+  try { const d = await load(cred.u, cred.p); if (d.ok) { rows = d.rows; render(); say($("admMsg"), "อัปเดตแล้ว", true); } }
+  catch { say($("admMsg"), "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"); }
+};
+$("outBtn").onclick = () => { cred = null; rows = []; location.hash = "admin"; show("vLogin"); };
+$("q").oninput = render;
+
+function render(){
+  const k = $("q").value.trim().toLowerCase();
+  const list = rows.filter(r => !k || [r.full_name, r.email, r.phone, r.organization, r.note].join(" ").toLowerCase().includes(k));
+  $("stat").textContent = `ทั้งหมด ${rows.length} คน` + (k ? ` · พบ ${list.length} รายการ` : "");
+  const tb = $("tb"); tb.replaceChildren();
+  list.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    const cells = [list.length - i, new Date(r.created_at).toLocaleString("th-TH"), r.full_name, r.email, r.phone, r.organization || "-", r.note || "-"];
+    cells.forEach((c, j) => { const td = document.createElement("td"); td.textContent = c; if (j === 6) td.className = "w"; tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+}
+
+$("csvBtn").onclick = () => {
+  const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  const head = ["วันที่ลงทะเบียน","ชื่อ-นามสกุล","อีเมล","เบอร์โทร","หน่วยงาน","หมายเหตุ"];
+  const csv = [head, ...rows.map(r => [r.created_at, r.full_name, r.email, r.phone, r.organization, r.note])].map(a => a.map(esc).join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], {type:"text/csv;charset=utf-8"}));
+  a.download = "registrations.csv"; a.click();
+};
+
+route();
+</script>
+</body>
+</html>
